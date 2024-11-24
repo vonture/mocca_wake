@@ -1,0 +1,3 @@
+[submodule "external/M5_Hardware"]
+	path = external/M5_Hardware
+	url = https://github.com/m5stack/M5_Hardware.git
