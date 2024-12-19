@@ -18,14 +18,17 @@ static constexpr int eeprom_persistent_data_addr = 0;
 void setup() {
     USBSerial.begin(9600);
 
-   if (! EEPROM.begin(eeprom_size)) {
+    if (!EEPROM.begin(eeprom_size)) {
         USBSerial.println("EEPROM::begin failed.");
-   }
+    }
 
     Wire.setPins(i2c_sda_pin, i2c_scl_pin);
 
     if (!wake.init(encoder_pin_a, encoder_pin_b, encoder_button_pin, eeprom_persistent_data_addr)) {
         USBSerial.println("mocca_wake::init failed.");
+        while (true) {
+            delay(1000);
+        }
     }
 }
 
