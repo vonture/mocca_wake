@@ -17,10 +17,17 @@ namespace mocca {
         constexpr const char* default_timezone = "America/Toronto";
         constexpr uint32_t default_wake_secs = 8 * SECS_PER_HOUR; // 8am
 
+        constexpr const char* spash_screen_text = "MoccaWake";
+
         constexpr uint32_t no_input_to_idle_millis = MILLIS_PER_SEC * 8;  // 8 sec
         constexpr uint32_t no_input_to_sleep_millis = MILLIS_PER_MIN * 5; // 5 mins
 
         constexpr uint32_t rotary_time_step = SECS_PER_MIN * 10; // 10 minutes per step
+
+        // 8x8 notification bar icons
+        constexpr unsigned char wifi_icon[] = {0x00, 0x3c, 0x42, 0x81, 0x3c, 0x42, 0x18, 0x18};
+        constexpr unsigned char pot_icon[] = {0x38, 0xff, 0x7d, 0x7d, 0x7d, 0x7f, 0x7c, 0x7c};
+        constexpr unsigned char water_icon[] = {0x10, 0x38, 0x38, 0x7c, 0x7c, 0xfe, 0x7c, 0x38};
 
         void init_default_data(persistent_data* data) {
             memset(data, 0, sizeof(persistent_data));
@@ -53,12 +60,12 @@ namespace mocca {
         _time_input.set_time_step(rotary_time_step);
     }
 
-    bool mocca_wake::init(int encoder_pin_a, int encoder_pin_b, int encoder_button_pin, int persistent_data_addr) {
+    bool mocca_wake::init(int encoder_pin_a, int encoder_pin_b, int encoder_button_pin, int water_switch_pin,
+                          int pot_switch_pin, int persistent_data_addr) {
         if (!_display.begin(SSD1306_SWITCHCAPVCC, display_i2c_addr)) {
             _log.println("SSD1306 allocation failed");
             return false;
         }
-        _display.setTextSize(1);
         _display.setTextColor(SSD1306_WHITE);
 
         _persistent_data_addr = persistent_data_addr;
@@ -73,12 +80,11 @@ namespace mocca {
                 [&]() {
                     EEPROM.get(_persistent_data_addr, _data);
                     // if (!_data.crc_is_valid()) {
+                    _log.println("Persistant data CRC missmatch. Resetting to default.");
                     init_default_data(&_data);
                     save_persistent_data();
                     //}
 
-                    // TODO: Move this into the state transition for idle->wake_set
-                    _time_input.set_current_time(_data.last_wake_secs);
                     return true;
                 },
             },
@@ -142,6 +148,9 @@ namespace mocca {
                         },
                         this);
 
+                    _water_switch.init(water_switch_pin, INPUT_PULLUP, true);
+                    _pot_switch.init(pot_switch_pin, INPUT_PULLUP, true);
+
                     return true;
                 },
             },
@@ -195,15 +204,47 @@ namespace mocca {
 
     void mocca_wake::draw_init_screen(const char* step_name, size_t step_index, size_t step_count) {
         _display.clearDisplay();
-        _display.setCursor(0, 0);
-        _display.print(step_name);
+
+        box full_screen_area(0, 0, _display.width(), _display.height());
+
+        box content_area;
+        draw_notification_bar(full_screen_area, &content_area);
+
+        _display.setTextSize(1);
+        draw_aligned_text(&_display, step_name, text_alignment::left, text_alignment::bottom, content_area);
+
+        _display.setTextSize(2);
+        draw_aligned_text(&_display, spash_screen_text, text_alignment::center, text_alignment::center, content_area);
+
         _display.display();
     }
 
     void mocca_wake::draw_notification_bar(const box& area, box* out_content_area) {
-        time_t current_time = _timezone.now();
-        const char* time_format_string = (current_time % 2 == 0) ? "g i" : "g:i";
-        String current_time_text = _timezone.dateTime(current_time, time_format_string);
+        auto draw_notification_icon = [](Adafruit_GFX* display, int16_t* cursor, const uint8_t bitmap8x8[]) {
+            display->drawBitmap(*cursor, 0, bitmap8x8, 8, 8, SSD1306_WHITE, SSD1306_BLACK);
+            *cursor += 10;
+        };
+
+        int16_t notification_icon_cursor = 0;
+        if (WiFi.status() == WL_CONNECTED) {
+            draw_notification_icon(&_display, &notification_icon_cursor, wifi_icon);
+        }
+        if (has_water()) {
+            draw_notification_icon(&_display, &notification_icon_cursor, water_icon);
+        }
+        if (has_pot()) {
+            draw_notification_icon(&_display, &notification_icon_cursor, pot_icon);
+        }
+
+        String current_time_text;
+        if (ezt::lastNtpUpdateTime() > 0) {
+            time_t current_time = _timezone.now();
+            const char* time_format_string = (current_time % 2 == 0) ? "g i a" : "g:i a";
+            current_time_text = _timezone.dateTime(current_time, time_format_string);
+        } else {
+            current_time_text = " ";
+        }
+
         _display.setTextSize(1);
         box text_area =
             draw_aligned_text(&_display, current_time_text.c_str(), text_alignment::right, text_alignment::top, area);
@@ -221,19 +262,21 @@ namespace mocca {
     void mocca_wake::draw_idle_screen() {
         _display.clearDisplay();
 
-        String status_text;
-        if (_data.current_wake > _timezone.now()) {
-            status_text = _timezone.dateTime(_data.current_wake, "g:i A");
-        } else {
-            status_text = "Not set";
-        }
-
         box full_screen_area(0, 0, _display.width(), _display.height());
         box content_area;
         draw_notification_bar(full_screen_area, &content_area);
 
-        _display.setTextSize(2);
-        draw_aligned_text(&_display, status_text.c_str(), text_alignment::center, text_alignment::center, content_area);
+        if (_data.current_wake > _timezone.now()) {
+            String time_text = _timezone.dateTime(_data.current_wake, "g:i a");
+            _display.setTextSize(2);
+            draw_aligned_text(&_display, ">", text_alignment::left, text_alignment::center, content_area);
+            draw_aligned_text(&_display, time_text.c_str(), text_alignment::center, text_alignment::center,
+                              content_area);
+            draw_aligned_text(&_display, "<", text_alignment::right, text_alignment::center, content_area);
+        } else {
+            _display.setTextSize(2);
+            draw_aligned_text(&_display, "Not set", text_alignment::center, text_alignment::center, content_area);
+        }
 
         _display.display();
     }
@@ -315,6 +358,14 @@ namespace mocca {
 
     void mocca_wake::on_any_input() {
         _last_input_time = millis();
+    }
+
+    bool mocca_wake::has_water() const {
+        return _water_switch.get_state();
+    }
+
+    bool mocca_wake::has_pot() const {
+        return _pot_switch.get_state();
     }
 
     void mocca_wake::set_brew_time(uint32_t secs) {

@@ -45,4 +45,17 @@ namespace mocca {
 
     box draw_aligned_text(Adafruit_SSD1306* display, const char* text, text_alignment horizontal_alignment,
                           text_alignment vertical_alignment, const box& area);
+
+    class binary_switch {
+      public:
+        binary_switch();
+
+        void init(uint8_t pin, uint8_t mode, bool active_low);
+
+        bool get_state() const;
+
+      private:
+        int _pin = -1;
+        int _pressed_state = 0;
+    };
 }; // namespace mocca

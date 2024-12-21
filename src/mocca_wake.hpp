@@ -21,7 +21,8 @@ namespace mocca {
       public:
         mocca_wake(Stream& log);
 
-        bool init(int encoder_pin_a, int encoder_pin_b, int encoder_button_pin, int persistent_data_addr);
+        bool init(int encoder_pin_a, int encoder_pin_b, int encoder_button_pin, int water_switch_pin,
+                  int pot_switch_pin, int persistent_data_addr);
 
         void step();
 
@@ -40,6 +41,9 @@ namespace mocca {
         void on_encoder_button_long_pressed();
         void on_any_input();
 
+        bool has_water() const;
+        bool has_pot() const;
+
         void set_brew_time(uint32_t secs);
 
         void transition_to_state(state new_state);
@@ -53,6 +57,8 @@ namespace mocca {
         int64_t _last_encoder_count = 0;
         ESP32Encoder _encoder;
         OneButton _encoder_button;
+        binary_switch _water_switch;
+        binary_switch _pot_switch;
         uint32_t _last_input_time = 0;
 
         rotary_time_input _time_input;

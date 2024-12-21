@@ -24,6 +24,7 @@ namespace mocca {
     bool persistent_data::crc_is_valid() const {
         return compute_peristen_data_crc(this) == crc;
     }
+
     void persistent_data::update_crc() {
         crc = compute_peristen_data_crc(this);
     }

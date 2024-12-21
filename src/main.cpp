@@ -12,6 +12,9 @@ static constexpr int encoder_pin_a = 1;
 static constexpr int encoder_pin_b = 2;
 static constexpr int encoder_button_pin = 3;
 
+static constexpr int water_switch_pin = 4;
+static constexpr int pot_switch_pin = 5;
+
 static constexpr size_t eeprom_size = sizeof(mocca::persistent_data);
 static constexpr int eeprom_persistent_data_addr = 0;
 
@@ -24,7 +27,8 @@ void setup() {
 
     Wire.setPins(i2c_sda_pin, i2c_scl_pin);
 
-    if (!wake.init(encoder_pin_a, encoder_pin_b, encoder_button_pin, eeprom_persistent_data_addr)) {
+    if (!wake.init(encoder_pin_a, encoder_pin_b, encoder_button_pin, water_switch_pin, pot_switch_pin,
+                   eeprom_persistent_data_addr)) {
         USBSerial.println("mocca_wake::init failed.");
         while (true) {
             delay(1000);

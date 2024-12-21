@@ -30,7 +30,7 @@ namespace mocca {
 
     void rotary_time_input::draw(Adafruit_SSD1306* display, const box& area) {
         time_t t = previousMidnight(ezt::now()) + _seconds;
-        String time_text = ezt::dateTime(t, "g:i A");
+        String time_text = ezt::dateTime(t, "~> g:i a");
 
         display->setTextSize(2);
         draw_aligned_text(display, time_text.c_str(), text_alignment::right, text_alignment::center, area);
