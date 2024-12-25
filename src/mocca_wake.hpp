@@ -33,6 +33,10 @@ namespace mocca {
         void draw_idle_screen();
         void draw_wake_set_screen();
 
+        bool synchronize_time(uint16_t timeout_secs);
+        bool wait_for_wifi(uint32_t timeout_millis);
+        bool is_wifi_connected() const;
+
         void save_persistent_data();
 
         void on_encoder_changed(int delta);
@@ -40,6 +44,9 @@ namespace mocca {
         void on_encoder_button_double_clicked();
         void on_encoder_button_long_pressed();
         void on_any_input();
+
+        void on_wifi_connected();
+        void on_wifi_disconnected();
 
         bool has_water() const;
         bool has_pot() const;
@@ -64,6 +71,8 @@ namespace mocca {
         rotary_time_input _time_input;
 
         Timezone _timezone;
+
+        bool _wifi_connected = false;
 
         state _state = state::idle;
     };

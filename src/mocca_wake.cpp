@@ -22,6 +22,9 @@ namespace mocca {
         constexpr uint32_t no_input_to_idle_millis = MILLIS_PER_SEC * 8;  // 8 sec
         constexpr uint32_t no_input_to_sleep_millis = MILLIS_PER_MIN * 5; // 5 mins
 
+        constexpr uint32_t wifi_wait_millis = MILLIS_PER_SEC * 5; // 5 sec
+        constexpr uint32_t time_sync_wait_secs = 5;               // 5 sec
+
         constexpr uint32_t rotary_time_step = SECS_PER_MIN * 10; // 10 minutes per step
 
         // 8x8 notification bar icons
@@ -93,32 +96,17 @@ namespace mocca {
                 [&]() {
                     WiFi.begin(_data.wifi_ssid, _data.wifi_password);
                     _log.printf("WiFi connecting to %s (pass %s)...", _data.wifi_ssid, _data.wifi_password);
-                    uint8_t wifi_status = WiFi.waitForConnectResult();
-                    if (wifi_status != WL_CONNECTED) {
-                        _log.printf(" failed. Status: %u\n", wifi_status);
-                        return false;
-                    }
-                    _log.printf(" connected.\n");
+                    wait_for_wifi(wifi_wait_millis);
+                    _log.printf("%s.", is_wifi_connected() ? "connected" : "failed");
                     return true;
                 },
             },
             {
                 "Synchronizing time...",
                 [&]() {
-                    _log.print("Waiting for time sync...");
-                    if (!ezt::waitForSync()) {
-                        _log.println(" failed.");
-                        return false;
+                    if (is_wifi_connected()) {
+                        synchronize_time(time_sync_wait_secs);
                     }
-                    _log.println(" done.");
-
-                    _log.printf("Setting timezone to %s...", _data.timezone);
-                    if (!_timezone.setLocation(_data.timezone)) {
-                        _log.println(" failed.");
-                        return false;
-                    }
-                    _log.printf(" done. Set timezone is %s.\n", _timezone.getTimezoneName().c_str());
-
                     return true;
                 },
             },
@@ -170,6 +158,15 @@ namespace mocca {
 
     void mocca_wake::step() {
         _encoder_button.tick();
+
+        if (_wifi_connected != (WiFi.status() == WL_CONNECTED)) {
+            _wifi_connected = !_wifi_connected;
+            if (_wifi_connected) {
+                on_wifi_connected();
+            } else {
+                on_wifi_disconnected();
+            }
+        }
 
         int64_t encoder_count = _encoder.getCount();
         if (encoder_count != _last_encoder_count) {
@@ -242,7 +239,7 @@ namespace mocca {
             const char* time_format_string = (current_time % 2 == 0) ? "g i a" : "g:i a";
             current_time_text = _timezone.dateTime(current_time, time_format_string);
         } else {
-            current_time_text = " ";
+            current_time_text = (ezt::now() % 2 != 0) ? "0:00" : " ";
         }
 
         _display.setTextSize(1);
@@ -290,6 +287,33 @@ namespace mocca {
 
         _time_input.draw(&_display, content_area);
         _display.display();
+    }
+
+    bool mocca_wake::synchronize_time(uint16_t timeout_secs) {
+        _log.print("Waiting for time sync...");
+        if (!ezt::waitForSync(time_sync_wait_secs)) {
+            _log.println(" failed.");
+            return false;
+        }
+        _log.println(" done.");
+
+        _log.printf("Setting timezone to %s...", _data.timezone);
+        if (!_timezone.setLocation(_data.timezone)) {
+            _log.println(" failed.");
+            return false;
+        }
+        _log.printf(" done. Set timezone is %s.\n", _timezone.getTimezoneName().c_str());
+        return true;
+    }
+
+    bool mocca_wake::wait_for_wifi(uint32_t timeout_millis) {
+        uint8_t wifi_status = WiFi.waitForConnectResult(timeout_millis);
+        _wifi_connected = (wifi_status == WL_CONNECTED);
+        return _wifi_connected;
+    }
+
+    bool mocca_wake::is_wifi_connected() const {
+        return _wifi_connected;
     }
 
     void mocca_wake::save_persistent_data() {
@@ -359,6 +383,12 @@ namespace mocca {
     void mocca_wake::on_any_input() {
         _last_input_time = millis();
     }
+
+    void mocca_wake::on_wifi_connected() {
+        synchronize_time(time_sync_wait_secs);
+    }
+
+    void mocca_wake::on_wifi_disconnected() {}
 
     bool mocca_wake::has_water() const {
         return _water_switch.get_state();
