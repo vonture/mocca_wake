@@ -1,7 +1,7 @@
 #pragma once
 
 #include "persistent_data.hpp"
-#include "rotary_time_input.hpp"
+#include "rotary_menu.hpp"
 #include "util.hpp"
 
 #include <Adafruit_SSD1306.h>
@@ -14,6 +14,7 @@ namespace mocca {
         idle,
         wake_set,
         menu,
+        status,
         brew,
     };
 
@@ -32,6 +33,8 @@ namespace mocca {
         void draw_sleep_screen();
         void draw_idle_screen();
         void draw_wake_set_screen();
+        void draw_menu_screen();
+        void draw_status_screen();
 
         bool synchronize_time(uint16_t timeout_secs);
         bool wait_for_wifi(uint32_t timeout_millis);
@@ -51,7 +54,10 @@ namespace mocca {
         bool has_water() const;
         bool has_pot() const;
 
+        void reset_brew_time();
         void set_brew_time(uint32_t secs);
+
+        void reset_settings();
 
         void transition_to_state(state new_state);
 
@@ -69,6 +75,7 @@ namespace mocca {
         uint32_t _last_input_time = 0;
 
         rotary_time_input _time_input;
+        rotary_menu _menu;
 
         Timezone _timezone;
 

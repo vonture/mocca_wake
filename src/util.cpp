@@ -13,6 +13,14 @@ namespace mocca {
         , w(w)
         , h(h) {}
 
+    int32_t box::right() const {
+        return x + w;
+    }
+
+    int32_t box::bottom() const {
+        return y + h;
+    }
+
     box draw_aligned_text(Adafruit_SSD1306* display, const char* text, text_alignment horizontal_alignment,
                           text_alignment vertical_alignment, const box& area) {
 

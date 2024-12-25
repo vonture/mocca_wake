@@ -194,6 +194,20 @@ namespace mocca {
             }
             draw_wake_set_screen();
             break;
+        case state::menu:
+            if (millis_since_last_input >= no_input_to_idle_millis) {
+                transition_to_state(state::idle);
+                break;
+            }
+            draw_menu_screen();
+            break;
+        case state::status:
+            if (millis_since_last_input >= no_input_to_idle_millis) {
+                transition_to_state(state::idle);
+                break;
+            }
+            draw_status_screen();
+            break;
         case state::brew:
             break;
         }
@@ -316,6 +330,32 @@ namespace mocca {
         return _wifi_connected;
     }
 
+    void mocca_wake::draw_menu_screen() {
+        _display.clearDisplay();
+
+        box full_screen_area(0, 0, _display.width(), _display.height());
+        box content_area;
+        draw_notification_bar(full_screen_area, &content_area);
+
+        _menu.draw(&_display, content_area);
+
+        _display.display();
+    }
+
+    void mocca_wake::draw_status_screen() {
+        _display.clearDisplay();
+
+        box full_screen_area(0, 0, _display.width(), _display.height());
+        box content_area;
+        draw_notification_bar(full_screen_area, &content_area);
+
+        _display.setCursor(0, 0);
+        _display.setTextSize(1);
+        draw_aligned_text(&_display, "status", text_alignment::left, text_alignment::center, content_area);
+
+        _display.display();
+    }
+
     void mocca_wake::save_persistent_data() {
         _data.update_crc();
         EEPROM.put(_persistent_data_addr, _data);
@@ -335,7 +375,7 @@ namespace mocca {
             break;
 
         case state::menu:
-            // TODO: scroll menu
+            _menu.on_encoder_changed(delta);
             break;
         }
 
@@ -355,7 +395,7 @@ namespace mocca {
             transition_to_state(state::idle);
             break;
         case state::menu:
-            // TODO: handle menu action
+            _menu.on_encoder_clicked();
             break;
         }
 
@@ -398,6 +438,8 @@ namespace mocca {
         return _pot_switch.get_state();
     }
 
+    void mocca_wake::reset_brew_time() {}
+
     void mocca_wake::set_brew_time(uint32_t secs) {
         // Find the next time_t that this "secs" will happen
         time_t now = _timezone.now();
@@ -416,6 +458,8 @@ namespace mocca {
         // TODO: Make the wake up event
     }
 
+    void mocca_wake::reset_settings() {}
+
     void mocca_wake::transition_to_state(state new_state) {
         _log.printf("Transition %s to %s\n", state_name(_state), state_name(new_state));
         _state = new_state;
@@ -432,6 +476,28 @@ namespace mocca {
         case state::wake_set:
             _time_input.set_current_time(_data.last_wake_secs);
             break;
+
+        case state::menu: {
+            std::vector<rotary_menu_option> options;
+            if (_data.current_wake > _timezone.now()) {
+                options.push_back({
+                    "Reset brew",
+                    [this]() {
+                        reset_brew_time();
+                        transition_to_state(state::idle);
+                    },
+                });
+            }
+            options.push_back({"Reset settings", [this]() {
+                                   reset_settings();
+                                   transition_to_state(state::idle);
+                               }});
+            options.push_back({
+                "Status",
+                [this]() { transition_to_state(state::status); },
+            });
+            _menu.set_menu_options(std::move(options), 0);
+        } break;
         }
     }
 } // namespace mocca

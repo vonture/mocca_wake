@@ -33,6 +33,9 @@ namespace mocca {
 
         box();
         box(int32_t x, int32_t y, int32_t w, int32_t h);
+
+        int32_t right() const;
+        int32_t bottom() const;
     };
 
     enum class text_alignment {
