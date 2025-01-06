@@ -7,11 +7,13 @@
 
 #include <functional>
 #include <vector>
+#include <optional>
 
 namespace mocca {
     class rotary_time_input {
       public:
-        void set_current_time(uint32_t seconds);
+        void set_current_time(uint32_t seconds, const char* default_option);
+        bool is_on_default_option() const;
         uint32_t get_current_time() const;
 
         void set_time_step(uint32_t seconds);
@@ -21,6 +23,8 @@ namespace mocca {
         void draw(Adafruit_SSD1306* display, const box& area);
 
       private:
+        String _default_option;
+        bool _on_default_option = false;
         uint32_t _step = 1;
         uint32_t _seconds = 0;
     };

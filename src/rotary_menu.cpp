@@ -14,10 +14,20 @@ namespace mocca {
             }
             return new_value;
         }
+
+        constexpr size_t text_size = 2;
+        constexpr size_t character_width = 6 * text_size;
+        constexpr size_t half_character_pad = character_width / 2;
     } // namespace
 
-    void rotary_time_input::set_current_time(uint32_t seconds) {
+    void rotary_time_input::set_current_time(uint32_t seconds, const char* default_option) {
         _seconds = seconds;
+        _default_option = default_option ? default_option : "";
+        _on_default_option = default_option != nullptr;
+    }
+
+    bool rotary_time_input::is_on_default_option() const {
+        return _on_default_option;
     }
 
     uint32_t rotary_time_input::get_current_time() const {
@@ -30,26 +40,27 @@ namespace mocca {
     }
 
     void rotary_time_input::on_encoder_changed(int delta) {
-        _seconds = advance_selected_item(_seconds, delta * _step, SECS_PER_DAY);
+        if (_on_default_option) {
+            _on_default_option = false;
+        } else {
+            _seconds = advance_selected_item(_seconds, delta * _step, SECS_PER_DAY);
+        }
     }
 
     void rotary_time_input::draw(Adafruit_SSD1306* display, const box& area) {
-        time_t t = previousMidnight(ezt::now()) + _seconds;
 
-        String prev_time = ezt::dateTime(t - _step, "g:i a");
-        String cur_time = ezt::dateTime(t, "~> g:i a");
-        String next_time = ezt::dateTime(t + _step, "g:i a");
+        String cur_option = _default_option;
+        if (!_on_default_option) {
+            time_t t = previousMidnight(ezt::now()) + _seconds;
+            cur_option = ezt::dateTime(t, "g:i a");
+        }
 
         display->setTextSize(2);
-        box offset_area(area.x, area.y, area.w - 6, area.h);
         box center_text_area =
-            draw_aligned_text(display, cur_time.c_str(), text_alignment::right, text_alignment::center, offset_area);
+            draw_aligned_text(display, cur_option.c_str(), text_alignment::right, text_alignment::center, area);
 
-        box area_above(area.x, area.y, area.w, center_text_area.y - area.y);
-        draw_aligned_text(display, prev_time.c_str(), text_alignment::right, text_alignment::bottom, area_above);
-
-        box area_below(area.x, center_text_area.bottom(), area.w, area.bottom() - center_text_area.bottom());
-        draw_aligned_text(display, next_time.c_str(), text_alignment::right, text_alignment::bottom, area_below);
+        box carat_area(area.x, area.y, center_text_area.x - half_character_pad - area.x, area.h);
+        draw_aligned_text(display, ">", text_alignment::right, text_alignment::center, carat_area);
     }
 
     void rotary_menu::set_menu_options(std::vector<rotary_menu_option>&& options, uint32_t selected_option) {
@@ -90,17 +101,31 @@ namespace mocca {
             return;
         }
 
-        constexpr size_t text_size = 2;
-        constexpr size_t character_width = 6 * text_size;
-
         const String& cur_option = _menu_options[_selected_option].display_text;
-        size_t cur_option_padding =
-            ((_max_option_length - cur_option.length()) * character_width) + (character_width / 2);
+        size_t cur_option_padding = ((_max_option_length - cur_option.length()) * character_width) + half_character_pad;
 
         display->setTextSize(text_size);
         box offset_area(area.x, area.y, area.w - cur_option_padding, area.h);
         box center_text_area =
             draw_aligned_text(display, cur_option.c_str(), text_alignment::right, text_alignment::center, offset_area);
-    }
 
+        box carat_area(area.x, area.y, center_text_area.x - half_character_pad - area.x, area.h);
+        draw_aligned_text(display, ">", text_alignment::right, text_alignment::center, carat_area);
+
+        if (_menu_options.size() >= 2) {
+            uint16_t other_option_text_left = center_text_area.x + half_character_pad;
+            box area_above(other_option_text_left, area.y, area.right() - other_option_text_left,
+                           center_text_area.y - area.y);
+
+            uint32_t prev_index = advance_selected_item(_selected_option, -1, _menu_options.size());
+            const String& prev_option = _menu_options[prev_index].display_text;
+            draw_aligned_text(display, prev_option.c_str(), text_alignment::left, text_alignment::bottom, area_above);
+
+            uint32_t next_index = advance_selected_item(_selected_option, 1, _menu_options.size());
+            const String& next_option = _menu_options[next_index].display_text;
+            box area_below(other_option_text_left, center_text_area.bottom(), area.right() - other_option_text_left,
+                           area.bottom() - center_text_area.bottom());
+            draw_aligned_text(display, next_option.c_str(), text_alignment::left, text_alignment::bottom, area_below);
+        }
+    }
 } // namespace mocca
