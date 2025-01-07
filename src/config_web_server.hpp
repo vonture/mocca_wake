@@ -14,6 +14,8 @@ namespace mocca {
         void step();
 
       private:
+        void on_any_web_request();
+
         AsyncWebServer _server;
 
         struct wifi_network_info {
@@ -27,6 +29,6 @@ namespace mocca {
             JsonDocument to_json() const;
         };
         std::vector<wifi_network_info> _networks;
-        uint32_t _last_scan_time = 0;
+        uint32_t _last_request = 0;
     };
 } // namespace mocca

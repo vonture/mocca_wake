@@ -10,8 +10,10 @@ namespace mocca {
         constexpr uint8_t display_height = 64;
         constexpr uint8_t display_i2c_addr = 0x3C;
 
-        constexpr const char* default_wifi_ssid = "langli";
-        constexpr const char* default_wifi_password = "abc123ffff";
+        // constexpr const char* default_wifi_ssid = "langli";
+        // constexpr const char* default_wifi_password = "abc123ffff";
+        constexpr const char* default_wifi_ssid = "";
+        constexpr const char* default_wifi_password = "";
         constexpr const char* default_timezone = "America/Toronto";
         constexpr uint32_t default_wake_secs = 8 * SECS_PER_HOUR; // 8am
 
@@ -52,6 +54,12 @@ namespace mocca {
                 return "idle";
             case state::wake_set:
                 return "wake_set";
+            case state::time_set:
+                return "time_set";
+            case state::menu:
+                return "menu";
+            case state::status:
+                return "status";
             case state::brew:
                 return "brew";
             default:
@@ -122,11 +130,11 @@ namespace mocca {
                 "Reading persistent data...",
                 [&]() {
                     EEPROM.get(_persistent_data_addr, _data);
-                    // if (!_data.crc_is_valid()) {
-                    _log.println("Persistant data CRC missmatch. Resetting to default.");
-                    init_default_data(&_data);
-                    save_persistent_data();
-                    //}
+                    if (!_data.crc_is_valid()) {
+                        _log.println("Persistant data CRC missmatch. Resetting to default.");
+                        init_default_data(&_data);
+                        save_persistent_data();
+                    }
 
                     return true;
                 },
@@ -413,8 +421,16 @@ namespace mocca {
         draw_notification_bar(full_screen_area, &content_area);
 
         String status_text;
-        status_text += "Network: " + WiFi.SSID() + "\n";
-        status_text += "IP: " + WiFi.localIP().toString() + "\n";
+
+        wifi_mode_t wifi_mode = WiFi.getMode();
+        if (wifi_mode == WIFI_MODE_STA || wifi_mode == WIFI_MODE_APSTA) {
+            status_text += "SSID: " + WiFi.SSID() + "\n";
+            status_text += "IP: " + WiFi.localIP().toString() + "\n";
+        }
+        if (wifi_mode == WIFI_MODE_AP || wifi_mode == WIFI_MODE_APSTA) {
+            status_text += "SSID: " + WiFi.softAPSSID() + "\n";
+            status_text += "IP: " + WiFi.softAPIP().toString() + "\n";
+        }
         status_text += "Timezone: " + _timezone.getTimezoneName() + "\n";
 
         _display.setTextSize(1);
@@ -467,6 +483,7 @@ namespace mocca {
 
     void mocca_wake::connect_to_wifi_or_fallback_to_ap(const char* ssid, const char* pass, uint32_t timeout_millis,
                                                        const char* fallback_ap_name) {
+        WiFi.disconnect();
         WiFi.mode(WIFI_STA);
         WiFi.begin(ssid, pass);
         _log.printf("WiFi connecting to \"%s\" (pass \"%s\")...", _data.wifi_ssid, _data.wifi_password);
@@ -611,7 +628,11 @@ namespace mocca {
         // TODO: Make the wake up event
     }
 
-    void mocca_wake::reset_settings() {}
+    void mocca_wake::reset_settings() {
+        init_default_data(&_data);
+        save_persistent_data();
+        connect_to_wifi_or_fallback_to_ap(_data.wifi_ssid, _data.wifi_password, wifi_wait_millis, config_ap_ssid);
+    }
 
     void mocca_wake::transition_to_state(state new_state) {
         _log.printf("Transition %s to %s\n", state_name(_state), state_name(new_state));

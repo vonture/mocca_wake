@@ -7,64 +7,40 @@
 namespace mocca {
 
     constexpr uint16_t web_server_port = 80;
-    constexpr uint32_t network_scan_interval = MILLIS_PER_SEC * 10;
+    constexpr uint32_t network_refresh_after_request_time = MILLIS_PER_SEC * 60;
 
     constexpr const char html_content[] PROGMEM = R"(
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-    <title>Sample HTML</title>
-</head>
 <body>
-    <h1>Hello, World!</h1>
-    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin euismod, purus a euismod
-    rhoncus, urna ipsum cursus massa, eu dictum tellus justo ac justo. Quisque ullamcorper
-    arcu nec tortor ullamcorper, vel fermentum justo fermentum. Vivamus sed velit ut elit
-    accumsan congue ut ut enim. Ut eu justo eu lacus varius gravida ut a tellus. Nulla facilisi.
-    Integer auctor consectetur ultricies. Fusce feugiat, mi sit amet bibendum viverra, orci leo
-    dapibus elit, id varius sem dui id lacus.</p>
-    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin euismod, purus a euismod
-    rhoncus, urna ipsum cursus massa, eu dictum tellus justo ac justo. Quisque ullamcorper
-    arcu nec tortor ullamcorper, vel fermentum justo fermentum. Vivamus sed velit ut elit
-    accumsan congue ut ut enim. Ut eu justo eu lacus varius gravida ut a tellus. Nulla facilisi.
-    Integer auctor consectetur ultricies. Fusce feugiat, mi sit amet bibendum viverra, orci leo
-    dapibus elit, id varius sem dui id lacus.</p>
-    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin euismod, purus a euismod
-    rhoncus, urna ipsum cursus massa, eu dictum tellus justo ac justo. Quisque ullamcorper
-    arcu nec tortor ullamcorper, vel fermentum justo fermentum. Vivamus sed velit ut elit
-    accumsan congue ut ut enim. Ut eu justo eu lacus varius gravida ut a tellus. Nulla facilisi.
-    Integer auctor consectetur ultricies. Fusce feugiat, mi sit amet bibendum viverra, orci leo
-    dapibus elit, id varius sem dui id lacus.</p>
-    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin euismod, purus a euismod
-    rhoncus, urna ipsum cursus massa, eu dictum tellus justo ac justo. Quisque ullamcorper
-    arcu nec tortor ullamcorper, vel fermentum justo fermentum. Vivamus sed velit ut elit
-    accumsan congue ut ut enim. Ut eu justo eu lacus varius gravida ut a tellus. Nulla facilisi.
-    Integer auctor consectetur ultricies. Fusce feugiat, mi sit amet bibendum viverra, orci leo
-    dapibus elit, id varius sem dui id lacus.</p>
-    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin euismod, purus a euismod
-    rhoncus, urna ipsum cursus massa, eu dictum tellus justo ac justo. Quisque ullamcorper
-    arcu nec tortor ullamcorper, vel fermentum justo fermentum. Vivamus sed velit ut elit
-    accumsan congue ut ut enim. Ut eu justo eu lacus varius gravida ut a tellus. Nulla facilisi.
-    Integer auctor consectetur ultricies. Fusce feugiat, mi sit amet bibendum viverra, orci leo
-    dapibus elit, id varius sem dui id lacus.</p>
-    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin euismod, purus a euismod
-    rhoncus, urna ipsum cursus massa, eu dictum tellus justo ac justo. Quisque ullamcorper
-    arcu nec tortor ullamcorper, vel fermentum justo fermentum. Vivamus sed velit ut elit
-    accumsan congue ut ut enim. Ut eu justo eu lacus varius gravida ut a tellus. Nulla facilisi.
-    Integer auctor consectetur ultricies. Fusce feugiat, mi sit amet bibendum viverra, orci leo
-    dapibus elit, id varius sem dui id lacus.</p>
-    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin euismod, purus a euismod
-    rhoncus, urna ipsum cursus massa, eu dictum tellus justo ac justo. Quisque ullamcorper
-    arcu nec tortor ullamcorper, vel fermentum justo fermentum. Vivamus sed velit ut elit
-    accumsan congue ut ut enim. Ut eu justo eu lacus varius gravida ut a tellus. Nulla facilisi.
-    Integer auctor consectetur ultricies. Fusce feugiat, mi sit amet bibendum viverra, orci leo
-    dapibus elit, id varius sem dui id lacus.</p>
-    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin euismod, purus a euismod
-    rhoncus, urna ipsum cursus massa, eu dictum tellus justo ac justo. Quisque ullamcorper
-    arcu nec tortor ullamcorper, vel fermentum justo fermentum. Vivamus sed velit ut elit
-    accumsan congue ut ut enim. Ut eu justo eu lacus varius gravida ut a tellus. Nulla facilisi.
-    Integer auctor consectetur ultricies. Fusce feugiat, mi sit amet bibendum viverra, orci leo
-    dapibus elit, id varius sem dui id lacus.</p>
+    <div id="networks" />
+    <script>
+        async function refreshNetworksList() {
+            const url = "wifi_networks";
+            const response = await fetch(url);
+            if (!response.ok) {
+            throw new Error(`Response status: ${response.status}`);
+            }
+
+            const json = await response.json();
+            let networkDivs = [];
+            json.networks.forEach(function(network) {
+                let networkDiv = document.createElement("div");
+                networkDiv.appendChild(document.createTextNode(network.ssid));
+                networkDivs.push(networkDiv);
+
+            });
+
+            let networksDiv = document.getElementById("networks");
+            networksDiv.replaceChildren(...networkDivs);
+
+            setTimeout(function() {
+                refreshNetworksList();
+            }, 1000);
+        }
+
+        refreshNetworksList();
+    </script>
 </body>
 </html>
 )";
@@ -92,10 +68,14 @@ namespace mocca {
     config_web_server::config_web_server()
         : _server(web_server_port) {
 
-        _server.on("/", HTTP_GET,
-                   [](AsyncWebServerRequest* request) { request->send(200, "text/html", html_content); });
+        _server.on("/", HTTP_GET, [this](AsyncWebServerRequest* request) {
+            on_any_web_request();
+            request->send(200, "text/html", html_content);
+        });
 
         _server.on("/wifi_networks", HTTP_GET, [this](AsyncWebServerRequest* request) {
+            on_any_web_request();
+
             AsyncJsonResponse* response = new AsyncJsonResponse();
             JsonObject root = response->getRoot().to<JsonObject>();
 
@@ -105,6 +85,7 @@ namespace mocca {
             }
 
             response->setLength();
+            response->addHeader("Access-Control-Allow-Origin", "*");
             request->send(response);
         });
     }
@@ -115,9 +96,8 @@ namespace mocca {
 
     void config_web_server::step() {
         uint32_t cur_time = millis();
-        if (cur_time - _last_scan_time >= network_scan_interval) {
+        if (cur_time < _last_request + network_refresh_after_request_time && WiFi.scanComplete() == WIFI_SCAN_FAILED) {
             WiFi.scanNetworks(true);
-            _last_scan_time = cur_time;
         }
 
         int16_t scan_result = WiFi.scanComplete();
@@ -128,6 +108,10 @@ namespace mocca {
             }
             WiFi.scanDelete();
         }
+    }
+
+    void config_web_server::on_any_web_request() {
+        _last_request = millis();
     }
 
     void config_web_server::wifi_network_info::set_from_network_item(uint8_t network_item) {
