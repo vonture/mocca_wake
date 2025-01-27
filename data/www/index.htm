@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+
+<body>
+    <div id="networks"></div>
+    <script>
+        async function refreshNetworksList() {
+            const url = "wifi_networks";
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`Response status: ${response.status}`);
+            }
+
+            const json = await response.json();
+            let networkDivs = [];
+            json.networks.forEach(function (network) {
+                let networkDiv = document.createElement("div");
+                networkDiv.appendChild(document.createTextNode(network.ssid));
+                networkDivs.push(networkDiv);
+            });
+
+            let networksDiv = document.getElementById("networks");
+            networksDiv.replaceChildren(...networkDivs);
+
+            setTimeout(function () {
+                refreshNetworksList();
+            }, 1000);
+        }
+
+        refreshNetworksList();
+
+        function connectToNetwork(ssid, password) {
+            const url = "wifi_connect";
+            fetch(url, {
+                method: "POST",
+                body: JSON.stringify({
+                    ssid: ssid,
+                    pass: password,
+                }),
+                headers: {
+                    "Content-type": "application/json"
+                }
+            })
+                .then((response) => response.json())
+                .then((json) => console.log(json));
+        }
+
+        function setTimezone(timezone) {
+            const url = "set_timezone";
+            fetch(url, {
+                method: "POST",
+                body: JSON.stringify({
+                    timezone: timezone,
+                }),
+                headers: {
+                    "Content-type": "application/json"
+                }
+            })
+                .then((response) => response.json())
+                .then((json) => console.log(json));
+        }
+
+        function connectToNewtworkButtonOnClick() {
+            connectToNetwork(document.getElementById("ssid").value, document.getElementById("password").value);
+        }
+    </script>
+    <label for="ssid">SSID:</label>
+    <input type="text" id="ssid"><br>
+    <label for="password">Pass:</label>
+    <input type="text" id="password"><br>
+    <input type="button" value="Connect" onclick="connectToNewtworkButtonOnClick()">
+</body>
+
+</html>

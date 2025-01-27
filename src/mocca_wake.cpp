@@ -10,8 +10,6 @@ namespace mocca {
         constexpr uint8_t display_height = 64;
         constexpr uint8_t display_i2c_addr = 0x3C;
 
-        // constexpr const char* default_wifi_ssid = "langli";
-        // constexpr const char* default_wifi_password = "abc123ffff";
         constexpr const char* default_wifi_ssid = "";
         constexpr const char* default_wifi_password = "";
         constexpr const char* default_timezone = "America/Toronto";
@@ -160,6 +158,11 @@ namespace mocca {
                 "Start web server...",
                 [&]() {
                     _config_web_server.init();
+                    _config_web_server.set_wifi_callback([this](const char* ssid, const char* password) {
+                        connect_to_wifi_or_fallback_to_ap(ssid, password, wifi_wait_millis, config_ap_ssid);
+                    });
+                    _config_web_server.set_timezone_callback(
+                        [this](const char* timezone) { return set_timezone(timezone); });
                     return true;
                 },
             },
@@ -462,6 +465,23 @@ namespace mocca {
         _has_valid_time = true;
     }
 
+    bool mocca_wake::set_timezone(const char* timezone) {
+        _log.printf("Setting timezone to %s...", _data.timezone);
+        if (!_timezone.setLocation(_data.timezone)) {
+            _log.println(" failed.");
+            return false;
+        }
+        _log.printf(" done. Set timezone is %s.\n", _timezone.getTimezoneName().c_str());
+
+        if (strcmp(_data.timezone, timezone) != 0) {
+            strcpy(_data.timezone, timezone);
+            save_persistent_data();
+        }
+
+        // TODO: If a wake up was set. Reset it.
+        return true;
+    }
+
     bool mocca_wake::synchronize_time(uint16_t timeout_secs) {
         _has_valid_time = false;
         _log.print("Waiting for time sync...");
@@ -471,12 +491,10 @@ namespace mocca {
         }
         _log.println(" done.");
 
-        _log.printf("Setting timezone to %s...", _data.timezone);
-        if (!_timezone.setLocation(_data.timezone)) {
-            _log.println(" failed.");
+        if (!set_timezone(_data.timezone)) {
             return false;
         }
-        _log.printf(" done. Set timezone is %s.\n", _timezone.getTimezoneName().c_str());
+
         _has_valid_time = true;
         return true;
     }
@@ -486,11 +504,12 @@ namespace mocca {
         WiFi.disconnect();
         WiFi.mode(WIFI_STA);
         WiFi.begin(ssid, pass);
-        _log.printf("WiFi connecting to \"%s\" (pass \"%s\")...", _data.wifi_ssid, _data.wifi_password);
+        _log.printf("WiFi connecting to \"%s\" (pass \"%s\")...", ssid, pass);
         uint8_t wifi_status = WiFi.waitForConnectResult(timeout_millis);
         _wifi_connected = (wifi_status == WL_CONNECTED);
-        _log.printf("%s.\n", _wifi_connected ? "connected" : "failed");
         if (_wifi_connected) {
+            _log.printf(" connected. IP: %s.\n", WiFi.localIP().toString().c_str());
+
             if (strcmp(_data.wifi_ssid, ssid) != 0 || strcmp(_data.wifi_password, pass)) {
                 strcpy(_data.wifi_ssid, ssid);
                 strcpy(_data.wifi_password, pass);
@@ -500,9 +519,10 @@ namespace mocca {
             return;
         }
 
-        _log.printf("Starting WiFi access point \"%s\".", fallback_ap_name);
+        _log.printf(" failed. Starting WiFi access point \"%s\".", fallback_ap_name);
         WiFi.mode(WIFI_AP);
         WiFi.softAP(fallback_ap_name);
+        _log.printf(" IP: %s.\n", WiFi.softAPIP().toString().c_str());
     }
 
     bool mocca_wake::is_wifi_connected() const {

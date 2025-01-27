@@ -1,9 +1,9 @@
 #pragma once
 
+#include "config_web_server.hpp"
 #include "persistent_data.hpp"
 #include "rotary_menu.hpp"
 #include "util.hpp"
-#include "config_web_server.hpp"
 
 #include <Adafruit_SSD1306.h>
 #include <ESP32Encoder.h>
@@ -43,7 +43,9 @@ namespace mocca {
 
         void set_time(time_t time);
         bool synchronize_time(uint16_t timeout_secs);
-        void connect_to_wifi_or_fallback_to_ap(const char* ssid, const char* pass, uint32_t timeout_millis, const char* fallback_ap_name);
+        bool set_timezone(const char* timezone);
+        void connect_to_wifi_or_fallback_to_ap(const char* ssid, const char* pass, uint32_t timeout_millis,
+                                               const char* fallback_ap_name);
         bool is_wifi_connected() const;
 
         void save_persistent_data();

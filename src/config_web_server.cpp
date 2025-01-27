@@ -2,48 +2,12 @@
 
 #include "util.hpp"
 
-#include <AsyncJson.h>
+#include <LittleFS.h>
 
 namespace mocca {
 
     constexpr uint16_t web_server_port = 80;
     constexpr uint32_t network_refresh_after_request_time = MILLIS_PER_SEC * 60;
-
-    constexpr const char html_content[] PROGMEM = R"(
-<!doctype html>
-<html>
-<body>
-    <div id="networks" />
-    <script>
-        async function refreshNetworksList() {
-            const url = "wifi_networks";
-            const response = await fetch(url);
-            if (!response.ok) {
-            throw new Error(`Response status: ${response.status}`);
-            }
-
-            const json = await response.json();
-            let networkDivs = [];
-            json.networks.forEach(function(network) {
-                let networkDiv = document.createElement("div");
-                networkDiv.appendChild(document.createTextNode(network.ssid));
-                networkDivs.push(networkDiv);
-
-            });
-
-            let networksDiv = document.getElementById("networks");
-            networksDiv.replaceChildren(...networkDivs);
-
-            setTimeout(function() {
-                refreshNetworksList();
-            }, 1000);
-        }
-
-        refreshNetworksList();
-    </script>
-</body>
-</html>
-)";
 
     static const char* auth_mode_name(wifi_auth_mode_t auth_mode) {
         switch (auth_mode) {
@@ -66,12 +30,9 @@ namespace mocca {
     };
 
     config_web_server::config_web_server()
-        : _server(web_server_port) {
-
-        _server.on("/", HTTP_GET, [this](AsyncWebServerRequest* request) {
-            on_any_web_request();
-            request->send(200, "text/html", html_content);
-        });
+        : _server(web_server_port)
+        , _wifi_connect_handler("/wifi_connect")
+        , _set_timezone_handler("/set_timezone") {
 
         _server.on("/wifi_networks", HTTP_GET, [this](AsyncWebServerRequest* request) {
             on_any_web_request();
@@ -88,9 +49,70 @@ namespace mocca {
             response->addHeader("Access-Control-Allow-Origin", "*");
             request->send(response);
         });
+
+        auto simple_json_response = [](AsyncWebServerRequest* request, int code, const char* failure_reason) {
+            AsyncJsonResponse* response = new AsyncJsonResponse();
+            JsonObject response_root = response->getRoot().to<JsonObject>();
+            if (failure_reason) {
+                response_root["status"] = "failed";
+                response_root["reason"] = failure_reason;
+            } else {
+                response_root["status"] = "ok";
+            }
+            response->setLength();
+            response->addHeader("Access-Control-Allow-Origin", "*");
+            response->setCode(code);
+            request->send(response);
+        };
+
+        _wifi_connect_handler.setMethod(HTTP_POST);
+        _wifi_connect_handler.onRequest(
+            [this, simple_json_response](AsyncWebServerRequest* request, JsonVariant& json) {
+                JsonString ssid = json["ssid"];
+                JsonString password = json["pass"];
+                if (ssid.isNull() || password.isNull()) {
+                    simple_json_response(request, 400, "null \"ssid\" or \"pass\" fields");
+                    return;
+                }
+
+                String ssid_copy(ssid.c_str());
+                String password_copy(password.c_str());
+                _main_thread_tasks.push_back([this, ssid_copy, password_copy]() {
+                    if (_wifi_set_callback) {
+                        _wifi_set_callback(ssid_copy.c_str(), password_copy.c_str());
+                    }
+                });
+
+                simple_json_response(request, 200, nullptr);
+            });
+        _server.addHandler(&_wifi_connect_handler);
+
+        _set_timezone_handler.setMethod(HTTP_POST);
+        _set_timezone_handler.onRequest(
+            [this, simple_json_response](AsyncWebServerRequest* request, JsonVariant& json) {
+                JsonString timezone = json["timezone"];
+                if (timezone.isNull()) {
+                    simple_json_response(request, 400, "null \"timezone\" field");
+                    return;
+                }
+
+                String timezone_copy(timezone.c_str());
+                _main_thread_tasks.push_back([this, timezone_copy]() {
+                    if (_timezone_set_callback) {
+                        _timezone_set_callback(timezone_copy.c_str());
+                    }
+                });
+
+                simple_json_response(request, 200, nullptr);
+            });
+        _server.addHandler(&_set_timezone_handler);
+
+        _server.serveStatic("/", LittleFS, "/www/", "max-age=600");
     }
 
     void config_web_server::init() {
+        LittleFS.begin(true);
+
         _server.begin();
     }
 
@@ -108,6 +130,19 @@ namespace mocca {
             }
             WiFi.scanDelete();
         }
+
+        for (auto main_thread_task : _main_thread_tasks) {
+            main_thread_task();
+        }
+        _main_thread_tasks.clear();
+    }
+
+    void config_web_server::set_wifi_callback(wifi_connect_callback callback) {
+        _wifi_set_callback = callback;
+    }
+
+    void config_web_server::set_timezone_callback(timezone_set_callback callback) {
+        _timezone_set_callback = callback;
     }
 
     void config_web_server::on_any_web_request() {
