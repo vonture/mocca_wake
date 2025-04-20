@@ -2,7 +2,7 @@ MoccaWake
 ==========
 A wifi-connected wake up timer for the [Mocca Master KGBT](https://us.moccamaster.com/products/kbgt?variant=40200137670819) coffee machine.
 
-![MoccaWake](./doc/img/panel_render.png)
+![MoccaWake](./doc/img/mocca_wake_full.jpg)
 
 ## Features
 
